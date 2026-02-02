@@ -6,9 +6,10 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export function FileExplorer() {
-    const { fileSystem, conflictState, editFile, resolveConflict } = useGitStore();
+    const { fileSystem, conflictState, editFile, resolveConflict, commits, head } = useGitStore();
     const [selectedFile, setSelectedFile] = useState<string | null>(null);
     const [editorContent, setEditorContent] = useState("");
+    const [feedback, setFeedback] = useState<string | null>(null);
 
     const files = Object.keys(fileSystem).sort();
 
@@ -23,17 +24,26 @@ export function FileExplorer() {
         if (conflictState && conflictState.path === selectedFile) {
             resolveConflict(editorContent);
             setSelectedFile(null); // Close after resolve
+            setFeedback("Conflict Resolved! Run 'git add .' to stage changes.");
+            setTimeout(() => setFeedback(null), 5000);
         } else {
             editFile(selectedFile, editorContent);
-            // Optionally close or just show saved feedback
             setSelectedFile(null);
         }
     };
 
     const isConflicted = (filename: string) => conflictState?.path === filename;
 
+    // Check if file is modified relative to HEAD
+    const isModified = (filename: string) => {
+        if (isConflicted(filename)) return false; // Conflict overrides modified
+        const headCommit = commits.find(c => c.id === head);
+        const headContent = headCommit?.fileSystem[filename];
+        return headContent !== fileSystem[filename];
+    };
+
     return (
-        <div className="flex flex-col h-full bg-muted/10 border-r border-border font-mono text-sm">
+        <div className="flex flex-col h-full bg-muted/10 border-r border-border font-mono text-sm relative">
             <div className="p-3 border-b border-border bg-muted/20 flex items-center justify-between">
                 <span className="font-bold opacity-70">EXPLORER</span>
                 {conflictState && (
@@ -42,6 +52,20 @@ export function FileExplorer() {
                     </span>
                 )}
             </div>
+
+            {/* Feedback Toast */}
+            <AnimatePresence>
+                {feedback && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0 }}
+                        className="absolute top-12 left-2 right-2 bg-green-500/90 text-white text-xs p-2 rounded shadow-lg z-50 text-center"
+                    >
+                        {feedback}
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* File List */}
             <div className="flex-1 overflow-y-auto p-2 space-y-1">
@@ -55,9 +79,10 @@ export function FileExplorer() {
                             ${isConflicted(file) ? 'text-red-500 font-bold border border-red-500/30 bg-red-500/10' : ''}
                         `}
                     >
-                        <File size={14} className={isConflicted(file) ? "text-red-500" : "opacity-50"} />
+                        <File size={14} className={isConflicted(file) ? "text-red-500" : (isModified(file) ? "text-yellow-500" : "opacity-50")} />
                         <span>{file}</span>
                         {isConflicted(file) && <span className="ml-auto text-xs">!</span>}
+                        {!isConflicted(file) && isModified(file) && <span className="ml-auto text-xs text-yellow-500">M</span>}
                     </div>
                 ))}
 

@@ -36,6 +36,11 @@ export const parseCommand = (input: string): ParseResult => {
         return { type: 'COMMIT', payload: { message: commitMatch[1] } };
     }
 
+    // git commit (for merges)
+    if (args === 'commit') {
+        return { type: 'COMMIT', payload: { message: null } };
+    }
+
     // git branch
     if (args === 'branch') {
         return { type: 'BRANCH' };

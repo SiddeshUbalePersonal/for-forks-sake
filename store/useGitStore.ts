@@ -31,6 +31,8 @@ export interface GitState {
 
     // Conflict State
     conflictState: Conflict | null;
+    mergeHead: string | null;
+    mergingBranch: string | null;
 
     // Actions
     init: () => void;
@@ -89,6 +91,8 @@ export const useGitStore = create<GitState>((set, get) => ({
     fileSystem: {},
     staging: new Set(),
     conflictState: null,
+    mergeHead: null,
+    mergingBranch: null,
 
     init: () => {
         const initialHash = generateHash();
@@ -113,7 +117,9 @@ export const useGitStore = create<GitState>((set, get) => ({
             currentBranch: 'main',
             fileSystem: initialFS,
             staging: new Set(),
-            conflictState: null
+            conflictState: null,
+            mergeHead: null,
+            mergingBranch: null
         });
     },
 
@@ -140,7 +146,7 @@ export const useGitStore = create<GitState>((set, get) => ({
     },
 
     commit: (message) => {
-        const { head, currentBranch, commits, branches, fileSystem, staging, conflictState } = get();
+        const { head, currentBranch, commits, branches, fileSystem, staging, conflictState, mergeHead, mergingBranch } = get();
 
         if (conflictState) {
             console.error("Resolve conflict first!");
@@ -148,26 +154,27 @@ export const useGitStore = create<GitState>((set, get) => ({
         }
 
         if (staging.size === 0) {
-            // Sim: allow empty commits or auto-stage?
-            // git commit -a is common. Let's auto-stage everything for usability if empty?
-            // No, let's force git add or commit -am. 
-            // For simplicity of tutorial, let's assume 'git commit' captures current WD snapshot if we simplify logic
-            // BUT user prompt asked for 'git add'.
-            // Let's enforce: If nothing staged, DO nothing.
-            // EXCEPT the level tutorial might break if they don't know git add.
-            // Fallback: If staging empty, Auto-stage ALL modified files (Behavior of VSCode commit button usually)
+            // ... (keep logic empty for now)
         }
 
         if (!head) return;
 
         const newHash = generateHash();
+
+        // Parent Logic: Normal = [head], Merge = [head, mergeHead]
+        const parentIds = [head];
+        if (mergeHead) {
+            parentIds.push(mergeHead);
+        }
+
         const parentCommit = commits.find(c => c.id === head);
         const visualBranch = currentBranch || (parentCommit ? parentCommit.branch : 'detached');
 
         const newCommit: Commit = {
             id: newHash,
-            parentIds: [head],
-            message,
+            parentIds: parentIds,
+            // Auto message if mergeHead exists and message is empty (from parser fix later)
+            message: message || (mergeHead ? `Merge branch '${mergingBranch || 'unknown'}'` : 'Update'),
             branch: visualBranch,
             timestamp: Date.now(),
             fileSystem: { ...fileSystem } // Snapshot
@@ -183,6 +190,8 @@ export const useGitStore = create<GitState>((set, get) => ({
             head: newHash,
             branches: newBranches,
             staging: new Set(), // Clear index
+            mergeHead: null,     // Clear merge state
+            mergingBranch: null
         });
     },
 
@@ -265,7 +274,11 @@ export const useGitStore = create<GitState>((set, get) => ({
         }
 
         if (conflictDetected) {
-            set({ conflictState: conflictDetected });
+            set({
+                conflictState: conflictDetected,
+                mergeHead: sourceCommitId, // Store specific commit for merge parent later
+                mergingBranch: sourceBranch // Store name for messaging
+            });
             return;
         }
 

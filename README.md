@@ -15,7 +15,14 @@ A realistic, regex-powered terminal emulator that accepts real Git commands.
 - `git checkout -b branch`
 - `git merge branch`
 - `git reset --hard HEAD~1`
+- `git reset --hard HEAD~1`
 - `git log`
+
+### ⚔️ Conflict Resolution Engine
+Real-world simulation of merge conflicts.
+- **Diff View**: 3-Way diff logic (Ours vs Theirs).
+- **File System**: working directory state vs staging area.
+- **Resolution UI**: Interactive "Accept Current" / "Accept Incoming" buttons.
 
 ### 🎮 Gamified Tutorials
 Master the basics through a dedicated **3-Level Tutorial System**:

@@ -8,6 +8,8 @@ interface TerminalProps {
     onSoundEffect?: (type: 'commit' | 'error') => void;
 }
 
+const generateHash = () => Math.random().toString(36).substring(2, 9);
+
 export function Terminal({ onSoundEffect }: TerminalProps) {
     const { currentBranch, commit, createBranch, checkout, merge, reset, branches, getLog, staging, stageFile } = useGitStore();
     const [history, setHistory] = useState<string[]>([]);
@@ -96,9 +98,23 @@ export function Terminal({ onSoundEffect }: TerminalProps) {
                         }
                         onSoundEffect?.('error');
                     } else {
-                        commit(result.payload.message);
-                        newHistory.push(`[${currentBranch || 'detached'} root-commit] ${result.payload.message}`);
-                        onSoundEffect?.('commit');
+                        // If result.payload.message is null, it might be a 'git commit' merge flow
+                        // We rely on store.commit implementation to provide default if needed or fail.
+                        // But we want to fail here if NOT merging and NO message.
+                        const { mergeHead } = useGitStore.getState();
+
+                        if (!result.payload.message && !mergeHead) {
+                            newHistory.push("Aborting commit due to empty commit message.");
+                            onSoundEffect?.('error');
+                        } else {
+                            commit(result.payload.message || ""); // empty string might trigger default or we let store handle
+                            // Actually store.commit is updated to handle empty string if mergeHead is set.
+                            // If commit succeeds, store updates.
+                            // We can assume success for Sim.
+                            const msg = result.payload.message || (mergeHead ? "Merge commit" : "Update");
+                            newHistory.push(`[${currentBranch || 'detached'} ${generateHash().substring(0, 7)}] ${msg}`);
+                            onSoundEffect?.('commit');
+                        }
                     }
                     break;
 
