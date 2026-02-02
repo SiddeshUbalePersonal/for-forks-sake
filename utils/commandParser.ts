@@ -6,6 +6,9 @@ export type GitCommandType =
     | 'RESET'
     | 'LOG'
     | 'BRANCH'
+    | 'STATUS'
+    | 'DIFF'
+    | 'ADD'
     | 'CLEAR'
     | 'UNKNOWN'
     | 'ERROR';
@@ -75,6 +78,22 @@ export const parseCommand = (input: string): ParseResult => {
     // git log
     if (args === 'log') {
         return { type: 'LOG' };
+    }
+
+    // git status
+    if (args === 'status') {
+        return { type: 'STATUS' };
+    }
+
+    // git diff
+    if (args === 'diff') {
+        return { type: 'DIFF' };
+    }
+
+    // git add .
+    if (args.match(/^add\s+(\.|\S+)$/)) {
+        const match = args.match(/^add\s+(\.|\S+)$/);
+        return { type: 'ADD', payload: { path: match ? match[1] : '.' } };
     }
 
     return { type: 'UNKNOWN', error: `git: '${args.split(' ')[0]}' is not a git command. See 'git --help'.` };

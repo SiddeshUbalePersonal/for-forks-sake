@@ -9,6 +9,7 @@ import { GitGraph } from "@/components/GitGraph";
 import { AnimatePresence, motion } from "framer-motion";
 import { LevelOverlay } from "@/components/LevelOverlay";
 import { useSoundEffects } from "@/hooks/useSoundEffects";
+import { FileExplorer } from "@/components/FileExplorer";
 
 export default function Home() {
     const [mounted, setMounted] = useState(false);
@@ -69,6 +70,11 @@ export default function Home() {
                 <div className="flex-1 overflow-hidden flex flex-col gap-4">
 
                     <Terminal onSoundEffect={(type) => type === 'commit' ? playCommit() : playError()} />
+
+                    {/* Integrated File Explorer */}
+                    <div className="flex-1 min-h-0 border border-border rounded-lg overflow-hidden flex flex-col">
+                        <FileExplorer />
+                    </div>
 
                     <div className="grid grid-cols-2 gap-2">
                         <button

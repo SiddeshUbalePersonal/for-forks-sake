@@ -9,7 +9,7 @@ interface TerminalProps {
 }
 
 export function Terminal({ onSoundEffect }: TerminalProps) {
-    const { currentBranch, commit, createBranch, checkout, merge, reset, branches, getLog } = useGitStore();
+    const { currentBranch, commit, createBranch, checkout, merge, reset, branches, getLog, staging, stageFile } = useGitStore();
     const [history, setHistory] = useState<string[]>([]);
     const [input, setInput] = useState("");
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -29,10 +29,77 @@ export function Terminal({ onSoundEffect }: TerminalProps) {
             const result = parseCommand(command);
 
             switch (result.type) {
+                case 'ADD':
+                    stageFile(result.payload.path);
+                    newHistory.push(""); // Silent success usually
+                    break;
+
+                case 'STATUS':
+                    // Real git status is complex. Simplified:
+                    // 1. Changes to be committed (Staged)
+                    // 2. Changes not staged (Modified)
+                    // 3. Untracked
+                    let output = "On branch " + (currentBranch || 'DETACHED') + "\n";
+
+                    const stagedFiles = Array.from(staging);
+
+                    // Unstaged logic: Check fileSystem vs HEAD
+                    const headCommit = useGitStore.getState().commits.find(c => c.id === useGitStore.getState().head);
+                    const headFS = headCommit ? headCommit.fileSystem : {};
+                    const currentFS = useGitStore.getState().fileSystem;
+
+                    const unstagedFiles: string[] = [];
+                    Object.keys(currentFS).forEach(file => {
+                        if (!staging.has(file)) {
+                            // If content modified or file is new vs HEAD
+                            if (currentFS[file] !== headFS[file]) {
+                                unstagedFiles.push(file);
+                            }
+                        }
+                    });
+
+                    if (stagedFiles.length > 0) {
+                        output += "Changes to be committed:\n  (use \"git reset HEAD <file>...\" to unstage)\n";
+                        stagedFiles.forEach(f => output += `\tmodified:   ${f}\n`);
+                    }
+
+                    if (unstagedFiles.length > 0) {
+                        output += "Changes not staged for commit:\n  (use \"git add <file>...\" to update what will be committed)\n";
+                        unstagedFiles.forEach(f => output += `\tmodified:   ${f}\n`);
+                    }
+
+                    if (stagedFiles.length === 0 && unstagedFiles.length === 0) {
+                        output += "nothing to commit, working tree clean\n";
+                    }
+                    newHistory.push(output);
+                    break;
+
+                case 'DIFF':
+                    // Show diff of unstaged changes? 
+                    // We don't have a diff engine text-wise.
+                    newHistory.push("Diff feature requires 'diff' engine. Please check File Explorer for changes.");
+                    break;
+
                 case 'COMMIT':
-                    commit(result.payload.message);
-                    newHistory.push(`[${currentBranch || 'detached'} root-commit] ${result.payload.message}`);
-                    onSoundEffect?.('commit');
+                    if (staging.size === 0) {
+                        // Check for unstaged changes to give better hint
+                        const headC = useGitStore.getState().commits.find(c => c.id === useGitStore.getState().head);
+                        const hFS = headC ? headC.fileSystem : {};
+                        const cFS = useGitStore.getState().fileSystem;
+                        const hasUnstaged = Object.keys(cFS).some(f => cFS[f] !== hFS[f]);
+
+                        if (hasUnstaged) {
+                            newHistory.push("Changes not staged for commit");
+                            newHistory.push("  (use \"git add\" and/or \"git commit -a\")");
+                        } else {
+                            newHistory.push("nothing to commit, working tree clean");
+                        }
+                        onSoundEffect?.('error');
+                    } else {
+                        commit(result.payload.message);
+                        newHistory.push(`[${currentBranch || 'detached'} root-commit] ${result.payload.message}`);
+                        onSoundEffect?.('commit');
+                    }
                     break;
 
                 case 'CREATE_BRANCH':
