@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    /* Technical Paper Aesthetic (Light Mode) */
+    --background: 255 255 255; /* Zinc-50 approx */
+    --foreground: 9 9 11; /* Zinc-950 */
+    --muted: 244 244 245; /* Zinc-100 */
+    --muted-foreground: 113 113 122; /* Zinc-500 */
+    --primary: 24 24 27; /* Zinc-900 */
+    --primary-foreground: 250 250 250; /* Zinc-50 */
+    --border: 228 228 231; /* Zinc-200 */
+  }
+
+  .dark {
+    /* IDE Aesthetic (Dark Mode) */
+    --background: 2 6 23; /* Slate-950 */
+    --foreground: 248 250 252; /* Slate-50 */
+    --muted: 15 23 42; /* Slate-900 */
+    --muted-foreground: 148 163 184; /* Slate-400 */
+    --primary: 56 189 248; /* Sky-400 - Syntax highlight color */
+    --primary-foreground: 15 23 42; /* Slate-900 */
+    --border: 30 41 59; /* Slate-800 */
+  }
+}
+
+body {
+  color: rgb(var(--foreground));
+  background: rgb(var(--background));
+  font-feature-settings: "rlig" 1, "calt" 1;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
