@@ -11,6 +11,7 @@ export function useGameLoop() {
     const [hasHydrated, setHasHydrated] = useState(false);
 
     const gitState = useGitStore();
+    const { gameMode } = gitState;
 
     // Hydrate persistence
     useEffect(() => {
@@ -21,54 +22,53 @@ export function useGameLoop() {
         setHasHydrated(true);
     }, []);
 
-    // Save persistence
+    // Save persistence (Tutorial Only)
     useEffect(() => {
-        if (hasHydrated) {
+        if (hasHydrated && gameMode === 'tutorial') {
             localStorage.setItem('ffs_level_index', currentLevelIndex.toString());
-
-            // Auto-setup level if needed
-            const level = levels[currentLevelIndex];
-            if (level?.setup) {
-                // We only run setup if it hasn't been run for this level session?
-                // Or maybe simple hack: check if history is empty or something?
-                // Better: Just run it. Reset the store for the level.
-                // BUT this runs every render if in dependency array? 
-                // We need a ref to track if we initialized this level index.
-            }
         }
-    }, [currentLevelIndex, hasHydrated]);
+    }, [currentLevelIndex, hasHydrated, gameMode]);
 
-    // Better effect for setup
+    // Setup Effect
     useEffect(() => {
-        if (hasHydrated) {
+        if (!hasHydrated) return;
+
+        if (gameMode === 'tutorial') {
             const level = levels[currentLevelIndex];
-            // Only run setup if we are "reset" or entering it fresh. 
-            // Since we don't have complex session tracking, let's assume if the store is "empty" or default we run it.
-            // Actually, for the Boss level, we WANT to force the scenario.
-            // Let's us a simple flag in session storage or just trust user won't refresh spam.
             if (level?.setup) {
-                // Check if we are already in the "Boss" state to avoid infinite reset loops?
-                // No, easiest is to let the user reset if they mess up.
-                // We will run setup ONCE per level index change.
+                // IMPORTANT: Ensure store is clean before running level setup?
+                // Level setup usually assumes we are adding to empty.
+                // But init() from MainMenu clears it.
                 level.setup(gitState);
             }
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentLevelIndex, hasHydrated]); // Run once when level index changes
+    }, [currentLevelIndex, hasHydrated, gameMode]); // Run on mode switch or level change
 
     // Check Win Condition
     useEffect(() => {
         if (!hasHydrated) return;
-        if (isLevelComplete) return; // Already done
+        if (isLevelComplete) return;
 
-        const currentLevel = levels[currentLevelIndex];
-        // If we ran out of levels, stop
-        if (!currentLevel) return;
-
-        if (currentLevel.winCondition(gitState)) {
-            setIsLevelComplete(true);
+        if (gameMode === 'tutorial') {
+            const currentLevel = levels[currentLevelIndex];
+            if (currentLevel && currentLevel.winCondition(gitState)) {
+                setIsLevelComplete(true);
+            }
         }
-    }, [gitState, currentLevelIndex, hasHydrated, isLevelComplete]);
+        // Challenge win condition would go here if we had active challenge state
+    }, [gitState, currentLevelIndex, hasHydrated, isLevelComplete, gameMode]);
+
+    // Return logic based on mode
+    if (gameMode !== 'tutorial') {
+        return {
+            currentLevel: null,
+            currentLevelIndex: 0,
+            isLevelComplete: false,
+            isGameComplete: false,
+            nextLevel: () => { },
+            resetProgress: () => { }
+        };
+    }
 
     const currentLevel = levels[currentLevelIndex];
     const isGameComplete = !currentLevel && currentLevelIndex >= levels.length;
@@ -84,8 +84,6 @@ export function useGameLoop() {
         setCurrentLevelIndex(0);
         setIsLevelComplete(false);
         localStorage.setItem('ffs_level_index', '0');
-        // Optionally reset git store too?
-        // gitState.reset('--hard', 'root'); // Complex, let's just let user do it or refresh
         window.location.reload();
     };
 

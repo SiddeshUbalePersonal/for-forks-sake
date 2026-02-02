@@ -10,6 +10,8 @@ export type GitCommandType =
     | 'DIFF'
     | 'ADD'
     | 'CLEAR'
+    | 'REBASE'
+    | 'CHERRY_PICK'
     | 'UNKNOWN'
     | 'ERROR';
 
@@ -62,6 +64,18 @@ export const parseCommand = (input: string): ParseResult => {
     const mergeMatch = args.match(/^merge\s+(.+)$/);
     if (mergeMatch) {
         return { type: 'MERGE', payload: { source: mergeMatch[1].trim() } };
+    }
+
+    // git rebase target-branch
+    const rebaseMatch = args.match(/^rebase\s+(.+)$/);
+    if (rebaseMatch) {
+        return { type: 'REBASE', payload: { target: rebaseMatch[1].trim() } };
+    }
+
+    // git cherry-pick hash
+    const cherryPickMatch = args.match(/^cherry-pick\s+(.+)$/);
+    if (cherryPickMatch) {
+        return { type: 'CHERRY_PICK', payload: { hash: cherryPickMatch[1].trim() } };
     }
     // Error handling for empty merge
     if (args.startsWith('merge')) {

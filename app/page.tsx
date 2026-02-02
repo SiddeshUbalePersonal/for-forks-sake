@@ -9,14 +9,16 @@ import { GitGraph } from "@/components/GitGraph";
 import { AnimatePresence, motion } from "framer-motion";
 import { LevelOverlay } from "@/components/LevelOverlay";
 import { useSoundEffects } from "@/hooks/useSoundEffects";
+import { MainMenu } from "@/components/MainMenu";
 import { FileExplorer } from "@/components/FileExplorer";
+import { ChallengeOverlay } from "@/components/ChallengeOverlay";
 
 export default function Home() {
     const [mounted, setMounted] = useState(false);
     const { theme, setTheme } = useTheme();
     const { enabled: soundEnabled, toggleMute, playCommit, playError, playWin } = useSoundEffects();
 
-    const { commits, init, commit, createBranch, head } = useGitStore();
+    const { commits, init, commit, createBranch, head, gameMode } = useGitStore();
 
     // Branch Modal State
     const [isBranchModalOpen, setIsBranchModalOpen] = useState(false);
@@ -40,7 +42,19 @@ export default function Home() {
 
     return (
         <main className="flex flex-col md:flex-row h-full w-full relative">
-            <LevelOverlay onLevelComplete={playWin} />
+            {/* Main Menu Overlay */}
+            <AnimatePresence>
+                {gameMode === 'home' && (
+                    <div className="absolute inset-0 z-[100]">
+                        <MainMenu />
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Level Overlay (Tutorial Only) */}
+            {gameMode === 'tutorial' && <LevelOverlay onLevelComplete={playWin} />}
+            {gameMode === 'challenge' && <ChallengeOverlay />}
+
             {/* LEFT PANEL: Controls & Terminal */}
 
             <aside className="w-full md:w-1/3 border-b md:border-b-0 md:border-r border-border bg-muted/30 p-6 flex flex-col gap-6">
@@ -49,6 +63,15 @@ export default function Home() {
                         <GitIcon className="w-6 h-6 text-primary" />
                         <span>For Fork's Sake</span>
                     </h1>
+                    {/* Home Button */}
+                    {gameMode !== 'home' && (
+                        <button
+                            onClick={() => useGitStore.getState().setGameMode('home')}
+                            className="text-xs bg-muted border border-border px-2 py-1 rounded"
+                        >
+                            Menu
+                        </button>
+                    )}
                     <div className="flex gap-2">
                         <button
                             onClick={toggleMute}
@@ -103,6 +126,9 @@ export default function Home() {
                */}
                 <div className="absolute top-4 right-4 z-10 bg-muted/50 backdrop-blur-sm px-4 py-2 rounded-full text-xs font-mono text-muted-foreground border border-border pointer-events-none">
                     HEAD: {head?.substring(0, 7)}
+                    <span className="ml-2 opacity-50 uppercase tracking-widest text-[10px] border-l border-border pl-2">
+                        {gameMode} MODE
+                    </span>
                 </div>
 
                 <div className="w-full h-full">

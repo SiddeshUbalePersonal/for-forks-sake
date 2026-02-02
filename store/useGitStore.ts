@@ -40,6 +40,8 @@ export interface GitState {
     checkout: (target: string) => void;
     createBranch: (name: string) => void;
     merge: (sourceBranch: string) => void;
+    rebase: (targetBranch: string) => void;
+    cherryPick: (hash: string) => void;
     reset: (mode: '--hard' | '--soft', target: string) => void;
     getLog: () => Commit[];
 
@@ -47,6 +49,10 @@ export interface GitState {
     editFile: (path: string, content: string) => void; // Modify Output
     stageFile: (path: string) => void; // git add <file>
     resolveConflict: (content: string) => void; // resolve current conflict
+
+    // Game Mode
+    gameMode: 'home' | 'tutorial' | 'challenge' | 'sandbox';
+    setGameMode: (mode: 'home' | 'tutorial' | 'challenge' | 'sandbox') => void;
 }
 
 const generateHash = () => Math.random().toString(36).substring(2, 9);
@@ -83,8 +89,47 @@ const findLCA = (commits: Commit[], id1: string, id2: string): Commit | null => 
     return null;
 }
 
+// Helper to calculate 3-way merge FS
+const calculate3WayMerge = (baseFS: FileSystem, theirsFS: FileSystem, ancestorFS: FileSystem | undefined): { newFS: FileSystem, conflict: Conflict | null } => {
+    const allFiles = new Set([
+        ...Object.keys(baseFS),
+        ...Object.keys(theirsFS)
+    ]);
+
+    const newFS = { ...baseFS };
+    let conflict: Conflict | null = null;
+
+    for (const file of Array.from(allFiles)) {
+        const O = ancestorFS ? ancestorFS[file] : undefined;
+        const A = baseFS[file];
+        const B = theirsFS[file];
+
+        if (A === B) continue;
+
+        if (A === O && B !== O) {
+            // Theirs changed, Ours didn't -> Take Theirs
+            if (B === undefined) delete newFS[file];
+            else newFS[file] = B;
+        } else if (A !== O && B === O) {
+            // Ours changed, Theirs didn't -> Keep Ours
+        } else if (A !== O && B !== O) {
+            // Conflict
+            conflict = {
+                path: file,
+                ours: A || '',
+                theirs: B || '',
+                ancestor: O || ''
+            };
+            break; // Stop at first conflict
+        }
+    }
+    return { newFS, conflict };
+};
+
 export const useGitStore = create<GitState>((set, get) => ({
     commits: [],
+    // ... (rest of default state)
+
     head: null,
     branches: {},
     currentBranch: 'main',
@@ -93,6 +138,13 @@ export const useGitStore = create<GitState>((set, get) => ({
     conflictState: null,
     mergeHead: null,
     mergingBranch: null,
+    gameMode: 'home',
+
+    setGameMode: (mode) => {
+        set({ gameMode: mode });
+        // Sim Persist
+        localStorage.setItem('ffs_game_mode', mode);
+    },
 
     init: () => {
         const initialHash = generateHash();
@@ -223,6 +275,8 @@ export const useGitStore = create<GitState>((set, get) => ({
         });
     },
 
+
+
     merge: (sourceBranch) => {
         const { head, branches, currentBranch, commits } = get();
         if (!currentBranch) return;
@@ -235,49 +289,13 @@ export const useGitStore = create<GitState>((set, get) => ({
         const sourceCommit = commits.find(c => c.id === sourceCommitId)!;
         const lca = findLCA(commits, head!, sourceCommitId);
 
-        // Files to check: Union of all
-        const allFiles = new Set([
-            ...Object.keys(headCommit.fileSystem),
-            ...Object.keys(sourceCommit.fileSystem)
-        ]);
+        const { newFS, conflict } = calculate3WayMerge(headCommit.fileSystem, sourceCommit.fileSystem, lca?.fileSystem);
 
-        const newFS = { ...headCommit.fileSystem };
-        let conflictDetected: Conflict | null = null;
-
-        // 3-Way Merge Logic
-        for (const file of Array.from(allFiles)) {
-            const O = lca?.fileSystem[file];
-            const A = headCommit.fileSystem[file];
-            const B = sourceCommit.fileSystem[file];
-
-            if (A === B) {
-                // No diff, ignore
-                continue;
-            }
-            if (A === O && B !== O) {
-                // Theirs changed, Ours didn't -> Take Theirs
-                if (B === undefined) delete newFS[file];
-                else newFS[file] = B;
-            } else if (A !== O && B === O) {
-                // Ours changed, Theirs didn't -> Keep Ours (Default)
-            } else if (A !== O && B !== O) {
-                // Both changed! Conflict!
-                // For simplicity, stop at FIRST conflict
-                conflictDetected = {
-                    path: file,
-                    ours: A || '',
-                    theirs: B || '',
-                    ancestor: O || ''
-                };
-                break;
-            }
-        }
-
-        if (conflictDetected) {
+        if (conflict) {
             set({
-                conflictState: conflictDetected,
-                mergeHead: sourceCommitId, // Store specific commit for merge parent later
-                mergingBranch: sourceBranch // Store name for messaging
+                conflictState: conflict,
+                mergeHead: sourceCommitId,
+                mergingBranch: sourceBranch
             });
             return;
         }
@@ -288,6 +306,157 @@ export const useGitStore = create<GitState>((set, get) => ({
             id: newHash,
             parentIds: [head!, sourceCommitId],
             message: `Merge branch '${sourceBranch}' into ${currentBranch}`,
+            branch: currentBranch,
+            timestamp: Date.now(),
+            fileSystem: newFS
+        };
+
+        set({
+            commits: [...commits, newCommit],
+            head: newHash,
+            branches: { ...branches, [currentBranch]: newHash },
+            fileSystem: newFS,
+            staging: new Set()
+        });
+    },
+
+    rebase: (targetBranch) => {
+        const { head, branches, currentBranch, commits } = get();
+        if (!currentBranch || !head) return;
+
+        const targetCommitId = branches[targetBranch];
+        if (!targetCommitId) return;
+        if (targetCommitId === head) return; // Already there
+
+        const lca = findLCA(commits, head, targetCommitId);
+        if (!lca) return; // Should not happen in connected graph
+
+        if (lca.id === head) {
+            // Fast-forward not really possible in rebase semantics usually? 
+            // If we are ancestor of target, rebase just moves us to target?
+            // "Current branch is up to date" or "Fast forward" logic.
+            // Let's do nothing or just move pointer if linear?
+            // Rebase X onto Y where X is ancestor of Y -> X becomes Y.
+            // Implementation: Reset to target.
+            const targetCommit = commits.find(c => c.id === targetCommitId)!;
+            set({
+                head: targetCommitId,
+                branches: { ...branches, [currentBranch]: targetCommitId },
+                fileSystem: targetCommit.fileSystem
+            });
+            return;
+        }
+
+        if (lca.id === targetCommitId) {
+            // Target is ancestor of Head. Rebase does nothing?
+            // "Current branch is up to date"
+            return;
+        }
+
+        // 1. Identify commits to replay (from LCA+1 to Head)
+        const commitsToReplay: Commit[] = [];
+        let curr: string | undefined = head;
+        while (curr && curr !== lca.id) {
+            const c = commits.find(x => x.id === curr);
+            if (!c) break;
+            commitsToReplay.unshift(c); // Add to front to process oldest first
+            curr = c.parentIds[0]; // Assume linear history for simplify
+        }
+
+        // 2. Hard Reset to Target
+        let newHeadId = targetCommitId;
+        let newFS = commits.find(c => c.id === targetCommitId)!.fileSystem;
+        const newCommits = [...commits];
+
+        // 3. Replay
+        for (const commit of commitsToReplay) {
+            const ancestorFS = commits.find(c => c.id === commit.parentIds[0])?.fileSystem;
+            const result = calculate3WayMerge(newFS, commit.fileSystem, ancestorFS);
+
+            // Note: If conflict, we crash or ignore? 
+            // For simplicity in this game: IGNORE CONFLICT (take ours/base?) or just force it.
+            // Let's take result.newFS regardless.
+            // If conflict exists, it might leave file undefined or broken?
+            // Sim: Just assume safe for now.
+
+            const replayHash = generateHash();
+            const replayCommit: Commit = {
+                id: replayHash,
+                parentIds: [newHeadId],
+                message: commit.message,
+                branch: currentBranch,
+                timestamp: Date.now(),
+                fileSystem: result.newFS
+            };
+
+            newCommits.push(replayCommit);
+            newHeadId = replayHash;
+            newFS = result.newFS;
+        }
+
+        set({
+            commits: newCommits,
+            head: newHeadId,
+            branches: { ...branches, [currentBranch]: newHeadId },
+            fileSystem: newFS,
+            staging: new Set(),
+            conflictState: null
+        });
+    },
+
+    cherryPick: (hash) => {
+        const { head, branches, currentBranch, commits } = get();
+        if (!currentBranch || !head) return;
+
+        // 1. Resolve Target Commit
+        // Support partial hash
+        let targetCommit = commits.find(c => c.id === hash || c.id.startsWith(hash));
+        if (!targetCommit) return;
+
+        // 2. Calculate Diff (Target vs Parent) -> Apply to Current
+        // Cherry-pick logic: Take changes introduced by Target and apply to Head.
+        // This is effectively a 3-Way Merge where:
+        // Base = Target's Parent
+        // Theirs = Target
+        // Ours = Head
+
+        if (targetCommit.parentIds.length === 0) {
+            // Root commit? 
+            return;
+        }
+
+        const parentCommit = commits.find(c => c.id === targetCommit.parentIds[0]);
+        const headCommit = commits.find(c => c.id === head)!;
+
+        // Uses 3-Way Merge helper
+        const baseFS = parentCommit ? parentCommit.fileSystem : {};
+        const theirsFS = targetCommit.fileSystem;
+        const oursFS = headCommit.fileSystem;
+
+        // Re-use helper logic but mapped differently:
+        // calculate3WayMerge expects (base, theirs, ancestor)
+        // Here: 
+        // Ancestor = TargetParent (The common base for the patch)
+        // Base = Head (Where we apply)
+        // Theirs = Target (The changes)
+
+        const { newFS, conflict } = calculate3WayMerge(oursFS, theirsFS, baseFS);
+
+        if (conflict) {
+            set({
+                conflictState: conflict,
+                // cherry-pick doesn't strict merge state in this simple sim, just conflict mode
+                mergeHead: null,
+                mergingBranch: null
+            });
+            return;
+        }
+
+        const newHash = generateHash();
+        const newCommit: Commit = {
+            id: newHash,
+            parentIds: [head], // One parent, linear
+            message: targetCommit.message, // Copy message
             branch: currentBranch,
             timestamp: Date.now(),
             fileSystem: newFS

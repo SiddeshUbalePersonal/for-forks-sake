@@ -157,6 +157,20 @@ export function Terminal({ onSoundEffect }: TerminalProps) {
                     }
                     break;
 
+                case 'REBASE':
+                    // Need to check if branch exists? Parser does not check valid branch.
+                    // useGitStore check?
+                    const { rebase, cherryPick } = useGitStore.getState(); // Fetch latest
+                    rebase(result.payload.target);
+                    newHistory.push(`Rebasing and updating refs/heads/${currentBranch}`);
+                    break;
+
+                case 'CHERRY_PICK':
+                    const { cherryPick: doCherryPick } = useGitStore.getState();
+                    doCherryPick(result.payload.hash);
+                    newHistory.push(`[${currentBranch} ${generateHash().substring(0, 7)}] Cherry-picking commit...`);
+                    break;
+
                 case 'RESET':
                     reset(result.payload.mode, result.payload.target);
                     newHistory.push(`HEAD is now at ${result.payload.target}`);
