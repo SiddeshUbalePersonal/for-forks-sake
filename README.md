@@ -57,7 +57,7 @@ Built with a focus on performance, interactivity, and aesthetics.
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/yourusername/for-forks-sake.git
+    git clone https://github.com/SiddeshUbalePersonal/for-forks-sake.git
     cd for-forks-sake
     ```
 
