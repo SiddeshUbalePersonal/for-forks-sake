@@ -83,7 +83,9 @@ export function GitGraph() {
                                 className="relative"
                                 style={{
                                     width: Math.max((maxX * X_SPACING) + 200, 800),
-                                    height: Math.max((maxY * Y_SPACING) + 300, 600)
+                                    height: Math.max((maxY * Y_SPACING) + 400, 700),
+                                    paddingTop: 100,
+                                    paddingBottom: 200
                                 }}
                             >
                                 {/* SVG Layer for Edges */}
@@ -96,9 +98,9 @@ export function GitGraph() {
                                             if (!parent) return null;
 
                                             const startX = parent.x * X_SPACING + 100; // Offset for padding
-                                            const startY = parent.y * X_SPACING + 150;
+                                            const startY = parent.y * Y_SPACING + 100;
                                             const endX = node.x * X_SPACING + 100;
-                                            const endY = node.y * X_SPACING + 150;
+                                            const endY = node.y * Y_SPACING + 100;
 
                                             const controlX1 = startX + X_SPACING / 2;
                                             const controlY1 = startY;
@@ -141,7 +143,7 @@ export function GitGraph() {
                                                     scale: 1,
                                                     opacity: 1,
                                                     x: node.x * X_SPACING + 100 - NODE_RADIUS,
-                                                    y: node.y * X_SPACING + 150 - NODE_RADIUS
+                                                    y: node.y * Y_SPACING + 100 - NODE_RADIUS
                                                 }}
                                                 transition={{ type: "spring", stiffness: 200, damping: 20 }}
                                                 className="absolute flex items-center justify-center group"

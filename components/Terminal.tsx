@@ -151,9 +151,20 @@ export function Terminal({ onSoundEffect }: TerminalProps) {
                     const source = result.payload.source;
                     if (!branches[source]) {
                         newHistory.push(`fatal: '${source}' does not appear to be a valid branch.`);
+                        onSoundEffect?.('error');
                     } else {
                         merge(source);
-                        newHistory.push(`Merge made by the 'ort' strategy.`);
+                        // Check if merge resulted in a conflict
+                        const postMergeState = useGitStore.getState();
+                        if (postMergeState.conflictState) {
+                            newHistory.push(`Auto-merging ${postMergeState.conflictState.path}`);
+                            newHistory.push(`CONFLICT (content): Merge conflict in ${postMergeState.conflictState.path}`);
+                            newHistory.push(`Automatic merge failed; fix conflicts and then commit the result.`);
+                            onSoundEffect?.('error');
+                        } else {
+                            newHistory.push(`Merge made by the 'ort' strategy.`);
+                            onSoundEffect?.('commit');
+                        }
                     }
                     break;
 

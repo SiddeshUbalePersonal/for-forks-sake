@@ -8,10 +8,10 @@ const nextConfig = {
         unoptimized: true,
     },
 
-    // 3. Set the Base Path (IMPORTANT)
-    // Since your repo is "for-forks-sake", your URL will be "username.github.io/for-forks-sake"
-    // If you don't add this, your CSS and images will be broken.
-    basePath: '/for-forks-sake',
+    // 3. Set the Base Path (Conditionally)
+    // Only use the base path in production for GitHub Pages. 
+    // Locally, we want to run on localhost:3000/ without the suffix.
+    basePath: process.env.NODE_ENV === 'production' ? '/for-forks-sake' : '',
 };
 
 export default nextConfig;

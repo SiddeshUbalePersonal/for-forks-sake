@@ -1,4 +1,4 @@
-import { GitState } from "@/store/useGitStore";
+import { GitState, useGitStore, Commit } from "@/store/useGitStore";
 
 export interface Level {
     id: number;
@@ -46,46 +46,97 @@ export const levels: Level[] = [
     {
         id: 4,
         title: "The Merge Conflict (BOSS)",
-        description: "You and your teammate edited the same file. Chaos ensues.",
-        task: "Resolve the conflict in style.css and complete the merge.",
-        setup: (store) => {
-            // Hard reset to a clean slate
-            store.init();
+        description: "Two developers edited the same line. Now you must choose whose code survives.",
+        task: "Run 'git merge feature' to trigger the conflict, then resolve it in style.css.",
+        setup: () => {
+            // === PHASE 1: Complete Reset ===
+            // Use a minimal initial commit with ONLY the file we care about
+            const generateHash = () => Math.random().toString(36).substring(2, 9);
 
-            // 1. Create content on Main
-            const mainContent = "body { background: red; }";
-            store.editFile('style.css', mainContent);
-            store.stageFile('style.css');
-            store.commit("Set background to red");
+            const baseContent = "body { background: white; }";
+            const baseHash = generateHash();
+            const baseCommit: Commit = {
+                id: baseHash,
+                parentIds: [],
+                message: "Initial commit",
+                branch: "main",
+                timestamp: Date.now(),
+                fileSystem: { "style.css": baseContent }
+            };
 
-            // 2. Branch to feature
-            store.createBranch('feature');
+            // === PHASE 2: Create Feature Branch Commit (BLUE) ===
+            const featureHash = generateHash();
+            const featureContent = "body { background: BLUE; }";
+            const featureCommit: Commit = {
+                id: featureHash,
+                parentIds: [baseHash],
+                message: "Change background to BLUE",
+                branch: "feature",
+                timestamp: Date.now() + 1,
+                fileSystem: { "style.css": featureContent }
+            };
 
-            // 3. Edit on Feature
-            store.checkout('feature');
-            store.editFile('style.css', "body { background: blue; }");
-            store.stageFile('style.css');
-            store.commit("Set background to blue");
+            // === PHASE 3: Create Main Branch Commit (RED) ===
+            const mainContent = "body { background: RED; }";
+            const mainHash = generateHash();
+            const mainCommit: Commit = {
+                id: mainHash,
+                parentIds: [baseHash],
+                message: "Change background to RED",
+                branch: "main",
+                timestamp: Date.now() + 2,
+                fileSystem: { "style.css": mainContent }
+            };
 
-            // 4. Back to Main, Edit differently (Conflict Prep)
-            store.checkout('main');
-            store.editFile('style.css', mainContent + "\n/* Main was here */");
-            store.stageFile('style.css');
-            store.commit("Update main style");
+            // === SET STATE ATOMICALLY ===
+            // Use Zustand's setState for proper reactivity
+            useGitStore.setState({
+                commits: [baseCommit, featureCommit, mainCommit],
+                branches: { main: mainHash, feature: featureHash },
+                head: mainHash,
+                currentBranch: "main",
+                fileSystem: { "style.css": mainContent },
+                staging: new Set<string>(),
+                conflictState: null,
+                mergeHead: null,
+                mergingBranch: null
+            });
 
-            // Ready for user to: git merge feature
+            // === READY ===
+            // Graph structure:
+            //     base (white)
+            //      /       \
+            //   feature    main
+            //   (BLUE)     (RED)
+            //
+            // When user runs: git merge feature
+            // LCA = base, Ours = main (RED), Theirs = feature (BLUE)
+            // Both differ from ancestor = GUARANTEED CONFLICT
         },
         winCondition: (state: GitState) => {
-            // Win if:
-            // 1. We have no conflicts
-            // 2. The head commit is a merge (2 parents)
-            // 3. We are on main
+            // Win conditions:
+            // 1. No active conflict state
+            // 2. On main branch
+            // 3. HEAD commit has 2 parents (is a merge commit)
+            // 4. style.css content does NOT contain conflict markers
+
             if (state.conflictState) return false;
             if (state.currentBranch !== 'main') return false;
+            if (state.mergeHead) return false; // Still in merge state
 
             const headCommit = state.commits.find(c => c.id === state.head);
-            return (headCommit?.parentIds.length || 0) >= 2;
+            if (!headCommit || headCommit.parentIds.length < 2) return false;
+
+            // Check that resolved file doesn't contain conflict markers
+            const styleContent = state.fileSystem["style.css"] || "";
+            if (styleContent.includes("<<<<") ||
+                styleContent.includes("====") ||
+                styleContent.includes(">>>>")) {
+                return false;
+            }
+
+            return true;
         },
-        hint: "1. git merge feature  2. Click conflict file  3. Resolve & Save  4. git add .  5. git commit"
+        hint: "1. git merge feature  2. Click the conflicted file  3. Edit to resolve  4. git add .  5. git commit"
     }
 ];

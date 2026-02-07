@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useGitStore, GitState } from "@/store/useGitStore";
 import { levels } from "@/data/levels";
 
@@ -9,9 +9,25 @@ export function useGameLoop() {
     const [currentLevelIndex, setCurrentLevelIndex] = useState(0);
     const [isLevelComplete, setIsLevelComplete] = useState(false);
     const [hasHydrated, setHasHydrated] = useState(false);
+    // Track if setup just ran - prevents immediate win condition checking
+    const [setupJustRan, setSetupJustRan] = useState(false);
+    // Track the initial state hash after setup to detect user actions
+    const initialStateHashRef = useRef<string | null>(null);
 
     const gitState = useGitStore();
     const { gameMode } = gitState;
+
+    // Helper to create a simple hash of the relevant git state
+    const getStateHash = (state: GitState): string => {
+        return JSON.stringify({
+            commits: state.commits.length,
+            head: state.head,
+            branches: state.branches,
+            conflictState: state.conflictState,
+            mergeHead: state.mergeHead,
+            fileSystem: state.fileSystem
+        });
+    };
 
     // Hydrate persistence
     useEffect(() => {
@@ -36,10 +52,21 @@ export function useGameLoop() {
         if (gameMode === 'tutorial') {
             const level = levels[currentLevelIndex];
             if (level?.setup) {
+                // Mark that setup is running - block win condition checks
+                setSetupJustRan(true);
+                setIsLevelComplete(false);
+
                 // IMPORTANT: Ensure store is clean before running level setup?
                 // Level setup usually assumes we are adding to empty.
                 // But init() from MainMenu clears it.
                 level.setup(gitState);
+
+                // After a tick, capture the initial state hash
+                // Win conditions will only be checked after user makes a change
+                setTimeout(() => {
+                    initialStateHashRef.current = getStateHash(useGitStore.getState());
+                    setSetupJustRan(false);
+                }, 100);
             }
         }
     }, [currentLevelIndex, hasHydrated, gameMode]); // Run on mode switch or level change
@@ -48,15 +75,27 @@ export function useGameLoop() {
     useEffect(() => {
         if (!hasHydrated) return;
         if (isLevelComplete) return;
+        if (setupJustRan) return; // Don't check while setup is running
 
         if (gameMode === 'tutorial') {
             const currentLevel = levels[currentLevelIndex];
-            if (currentLevel && currentLevel.winCondition(gitState)) {
+            if (!currentLevel) return;
+
+            // For levels with setup, only check win condition if state has changed from initial
+            if (currentLevel.setup && initialStateHashRef.current) {
+                const currentHash = getStateHash(gitState);
+                if (currentHash === initialStateHashRef.current) {
+                    // State hasn't changed since setup - user hasn't done anything yet
+                    return;
+                }
+            }
+
+            if (currentLevel.winCondition(gitState)) {
                 setIsLevelComplete(true);
             }
         }
         // Challenge win condition would go here if we had active challenge state
-    }, [gitState, currentLevelIndex, hasHydrated, isLevelComplete, gameMode]);
+    }, [gitState, currentLevelIndex, hasHydrated, isLevelComplete, gameMode, setupJustRan]);
 
     // Return logic based on mode
     if (gameMode !== 'tutorial') {

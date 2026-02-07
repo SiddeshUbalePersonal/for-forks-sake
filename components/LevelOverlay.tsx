@@ -25,7 +25,7 @@ export function LevelOverlay({ onLevelComplete }: LevelOverlayProps) {
             <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="absolute top-6 right-6 z-50 w-80 bg-background/95 backdrop-blur border border-green-500/50 rounded-xl p-6 shadow-2xl"
+                className="absolute bottom-6 right-6 z-50 w-80 bg-background/95 backdrop-blur border border-green-500/50 rounded-xl p-6 shadow-2xl"
             >
                 <div className="flex flex-col items-center text-center gap-4">
                     <Trophy className="w-12 h-12 text-yellow-500" />
@@ -50,7 +50,7 @@ export function LevelOverlay({ onLevelComplete }: LevelOverlayProps) {
 
     return (
         <motion.div
-            className="absolute top-0 right-0 p-6 z-40 max-w-sm pointer-events-auto"
+            className="absolute bottom-0 right-0 p-6 z-40 max-w-sm pointer-events-auto"
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             drag
